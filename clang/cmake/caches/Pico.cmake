@@ -34,10 +34,6 @@ set(LLVM_DISTRIBUTION_COMPONENTS
   ${LLVM_TOOLCHAIN_TOOLS}
   CACHE STRING "")
 
-# TODO: Switch to newhdrgen for LLVM libc
-set(LLVM_LIBC_FULL_BUILD ON CACHE BOOL "")
-set(LIBC_HDRGEN_ONLY ON CACHE BOOL "")
-
 set(LLVM_BUILTIN_TARGETS armv8m.main-none-eabi;riscv32-unknown-elf CACHE STRING "")
 foreach(target ${LLVM_BUILTIN_TARGETS})
   set(BUILTINS_${target}_CMAKE_SYSTEM_NAME Generic CACHE STRING "")
@@ -62,8 +58,6 @@ foreach(target ${LLVM_RUNTIME_TARGETS})
   set(RUNTIMES_${target}_LLVM_INCLUDE_TESTS OFF CACHE BOOL "")
   set(RUNTIMES_${target}_LLVM_LIBC_FULL_BUILD ON CACHE BOOL "")
   set(RUNTIMES_${target}_LIBC_ENABLE_USE_BY_CLANG ON CACHE BOOL "")
-  # TODO: Switch to newhdrgen for LLVM libc
-  set(RUNTIMES_${target}_LIBC_USE_NEW_HEADER_GEN OFF CACHE BOOL "")
   set(RUNTIMES_${target}_LIBCXX_CXX_ABI none CACHE STRING "")
   set(RUNTIMES_${target}_LIBCXX_LIBC llvm-libc CACHE STRING "")
   set(RUNTIMES_${target}_LIBCXX_ENABLE_SHARED OFF CACHE BOOL "")
