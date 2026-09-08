@@ -131,6 +131,7 @@ set(TARGET_LIBC_ENTRYPOINTS
     libc.src.stdio.fclose
     libc.src.stdio.fgetc
     libc.src.stdio.fgets
+    libc.src.stdio.fopencookie
     libc.src.stdio.fprintf
     libc.src.stdio.fputc
     libc.src.stdio.fputs

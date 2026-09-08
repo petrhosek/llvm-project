@@ -12,12 +12,13 @@
 #include "src/__support/OSUtil/baremetal/io.h"
 #include "src/__support/common.h"
 #include "src/__support/macros/config.h"
+#include "src/stdio/baremetal/file_internal.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 extern "C" struct __llvm_libc_stdio_cookie __llvm_libc_stdin_cookie;
 
-LLVM_LIBC_VARIABLE(FILE *,
-                   stdin) = reinterpret_cast<FILE *>(&__llvm_libc_stdin_cookie);
+LLVM_LIBC_VARIABLE(FILE *, stdin) = reinterpret_cast<FILE *>(
+    StandardStream<BaremetalFile, &__llvm_libc_stdin_cookie>::value);
 
 } // namespace LIBC_NAMESPACE_DECL

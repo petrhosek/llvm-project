@@ -1,14 +1,22 @@
-add_object_library(
+add_header_library(
   file_internal
-  SRCS
-    file_internal.cpp
   HDRS
     file_internal.h
   DEPENDS
+    libc.hdr.errno_macros
+    libc.hdr.stdio_macros
     libc.hdr.types.FILE
+    libc.hdr.types.off_t
+    libc.hdr.types.size_t
+    libc.hdr.types.ssize_t
     libc.src.__support.CPP.string_view
     libc.src.__support.File.file_io_result
+    libc.src.__support.File.file_variant
+    libc.src.__support.File.io_backend
     libc.src.__support.OSUtil.osutil
+    libc.src.__support.common
+    libc.src.__support.libc_errno
+    libc.src.__support.macros.config
 )
 
 add_entrypoint_object(
@@ -16,9 +24,13 @@ add_entrypoint_object(
   SRCS fclose.cpp
   HDRS ../fclose.h
   DEPENDS
+    .file_internal
+    libc.hdr.errno_macros
+    libc.hdr.stdio_macros
     libc.src.__support.OSUtil.osutil
     libc.src.__support.common
     libc.src.__support.macros.config
+    libc.src.errno.errno
 )
 
 add_entrypoint_object(
@@ -26,6 +38,7 @@ add_entrypoint_object(
   SRCS fseek.cpp
   HDRS ../fseek.h
   DEPENDS
+    .file_internal
     libc.hdr.errno_macros
     libc.src.__support.OSUtil.osutil
     libc.src.__support.common
@@ -38,8 +51,10 @@ add_entrypoint_object(
   SRCS ftell.cpp
   HDRS ../ftell.h
   DEPENDS
+    .file_internal
     libc.hdr.errno_macros
     libc.hdr.stdio_macros
+    libc.src.__support.CPP.limits
     libc.src.__support.OSUtil.osutil
     libc.src.__support.common
     libc.src.__support.macros.config
@@ -51,6 +66,7 @@ add_entrypoint_object(
   SRCS fseeko.cpp
   HDRS ../fseeko.h
   DEPENDS
+    .file_internal
     libc.hdr.errno_macros
     libc.src.__support.OSUtil.osutil
     libc.src.__support.common
@@ -63,6 +79,7 @@ add_entrypoint_object(
   SRCS ftello.cpp
   HDRS ../ftello.h
   DEPENDS
+    .file_internal
     libc.hdr.errno_macros
     libc.hdr.stdio_macros
     libc.src.__support.OSUtil.osutil
@@ -76,6 +93,7 @@ add_header_library(
   HDRS
     vfprintf_internal.h
   DEPENDS
+    .file_internal
     libc.hdr.types.FILE
     libc.hdr.stdio_macros
     libc.src.__support.arg_list
@@ -114,7 +132,9 @@ add_entrypoint_object(
   HDRS
     ../feof.h
   DEPENDS
+    .file_internal
     libc.hdr.types.FILE
+    libc.src.__support.macros.config
 )
 
 add_entrypoint_object(
@@ -124,7 +144,9 @@ add_entrypoint_object(
   HDRS
     ../ferror.h
   DEPENDS
+    .file_internal
     libc.hdr.types.FILE
+    libc.src.__support.macros.config
 )
 
 add_entrypoint_object(
@@ -171,6 +193,26 @@ add_entrypoint_object(
     .file_internal
     libc.hdr.stdio_macros
     libc.hdr.types.FILE
+    libc.src.errno.errno
+)
+
+add_entrypoint_object(
+  fopencookie
+  SRCS
+    fopencookie.cpp
+  HDRS
+    ../fopencookie.h
+  DEPENDS
+    .file_internal
+    libc.hdr.errno_macros
+    libc.hdr.types.FILE
+    libc.hdr.types.cookie_io_functions_t
+    libc.src.__support.CPP.new
+    libc.src.__support.CPP.utility
+    libc.src.__support.alloc_checker
+    libc.src.__support.common
+    libc.src.__support.libc_errno
+    libc.src.__support.macros.config
     libc.src.errno.errno
 )
 
@@ -361,7 +403,11 @@ add_entrypoint_object(
   HDRS
     ../stdin.h
   DEPENDS
+    .file_internal
     libc.hdr.types.FILE
+    libc.src.__support.OSUtil.osutil
+    libc.src.__support.common
+    libc.src.__support.macros.config
 )
 
 add_entrypoint_object(
@@ -371,7 +417,11 @@ add_entrypoint_object(
   HDRS
     ../stdout.h
   DEPENDS
+    .file_internal
     libc.hdr.types.FILE
+    libc.src.__support.OSUtil.osutil
+    libc.src.__support.common
+    libc.src.__support.macros.config
 )
 
 add_entrypoint_object(
@@ -381,7 +431,11 @@ add_entrypoint_object(
   HDRS
     ../stderr.h
   DEPENDS
+    .file_internal
     libc.hdr.types.FILE
+    libc.src.__support.OSUtil.osutil
+    libc.src.__support.common
+    libc.src.__support.macros.config
 )
 
 add_entrypoint_object(

@@ -14,25 +14,15 @@
 #include "src/stdio/ftello.h"
 
 #include "hdr/errno_macros.h"
-#include "hdr/stdio_macros.h"
-#include "src/__support/OSUtil/io.h"
 #include "src/__support/common.h"
 #include "src/__support/libc_errno.h"
 #include "src/__support/macros/config.h"
+#include "src/stdio/baremetal/file_internal.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(off_t, ftello, (::FILE * stream)) {
-  if (stream == nullptr) {
-    libc_errno = EINVAL;
-    return static_cast<off_t>(-1);
-  }
-  off_t result = __llvm_libc_stdio_seek(stream, 0, SEEK_CUR);
-  if (result < 0) {
-    libc_errno = static_cast<int>(-result);
-    return static_cast<off_t>(-1);
-  }
-  return result;
+  return BaremetalFile::tell(stream);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

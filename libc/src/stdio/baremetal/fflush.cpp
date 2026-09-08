@@ -9,14 +9,13 @@
 #include "src/stdio/fflush.h"
 
 #include "src/__support/common.h"
+#include "src/__support/macros/config.h"
+#include "src/stdio/baremetal/file_internal.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
-// Baremetal uses unbuffered I/O, so there is nothing to flush.
 LLVM_LIBC_FUNCTION(int, fflush, (::FILE * stream)) {
-  (void)stream;
-  // TODO: Shall we have an embedding API for fflush?
-  return 0;
+  return BaremetalFile::flush(stream);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

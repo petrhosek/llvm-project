@@ -11,13 +11,12 @@
 #include "hdr/types/FILE.h"
 #include "src/__support/common.h"
 #include "src/__support/macros/config.h"
+#include "src/stdio/baremetal/file_internal.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(int, ferror, (::FILE * stream)) {
-  (void)stream;
-  // TODO: Shall we have an embeddeding API for ferror?
-  return 0;
+  return BaremetalFile::get_err(stream);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

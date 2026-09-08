@@ -93,6 +93,12 @@
       "doc": "Disable Clinger's fast path for string to float conversion."
     }
   },
+  "stdio": {
+    "LIBC_CONF_STDIO_ENABLE_DYNAMIC_BACKEND": {
+      "value": true,
+      "doc": "Enable dynamic backend for FILE * implementation."
+    }
+  },
   "string": {
     "LIBC_CONF_STRING_LENGTH_IMPL": {
       "value": "element",

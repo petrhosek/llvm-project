@@ -14,25 +14,15 @@
 #include "src/stdio/fseek.h"
 
 #include "hdr/errno_macros.h"
-#include "src/__support/OSUtil/io.h"
 #include "src/__support/common.h"
 #include "src/__support/libc_errno.h"
 #include "src/__support/macros/config.h"
+#include "src/stdio/baremetal/file_internal.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(int, fseek, (::FILE * stream, long offset, int whence)) {
-  if (stream == nullptr) {
-    libc_errno = EINVAL;
-    return -1;
-  }
-  off_t result =
-      __llvm_libc_stdio_seek(stream, static_cast<off_t>(offset), whence);
-  if (result < 0) {
-    libc_errno = static_cast<int>(-result);
-    return -1;
-  }
-  return 0;
+  return BaremetalFile::seek(stream, offset, whence);
 }
 
 } // namespace LIBC_NAMESPACE_DECL

@@ -1,8 +1,42 @@
+# The targets below deliberately sit above the mutex/GPU guard: they are
+# header-only, do no locking, and are used by targets (such as the baremetal
+# stdio) that are built even where the full File class is not.
+
 add_header_library(
   file_io_result
   HDRS
     file_io_result.h
   DEPENDS
+    libc.src.__support.macros.config
+)
+
+add_header_library(
+  io_backend
+  HDRS
+    io_backend.h
+  DEPENDS
+    libc.hdr.types.cookie_io_functions_t
+    libc.src.__support.macros.config
+)
+
+add_header_library(
+  file_variant
+  HDRS
+    file_variant.h
+  DEPENDS
+    .file_io_result
+    .io_backend
+    libc.hdr.errno_macros
+    libc.hdr.stdint_proxy
+    libc.hdr.stdio_macros
+    libc.hdr.types.cookie_io_functions_t
+    libc.hdr.types.off_t
+    libc.hdr.types.size_t
+    libc.hdr.types.ssize_t
+    libc.src.__support.CPP.new
+    libc.src.__support.CPP.utility
+    libc.src.__support.common
+    libc.src.__support.libc_errno
     libc.src.__support.macros.config
 )
 

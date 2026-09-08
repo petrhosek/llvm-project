@@ -14,23 +14,21 @@
 #include "src/stdio/ftell.h"
 
 #include "hdr/errno_macros.h"
-#include "hdr/stdio_macros.h"
-#include "src/__support/OSUtil/io.h"
+#include "src/__support/CPP/limits.h"
 #include "src/__support/common.h"
 #include "src/__support/libc_errno.h"
 #include "src/__support/macros/config.h"
+#include "src/stdio/baremetal/file_internal.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 LLVM_LIBC_FUNCTION(long, ftell, (::FILE * stream)) {
-  if (stream == nullptr) {
-    libc_errno = EINVAL;
-    return -1;
-  }
-  off_t result = __llvm_libc_stdio_seek(stream, 0, SEEK_CUR);
-  if (result < 0) {
-    libc_errno = static_cast<int>(-result);
-    return -1;
+  off_t result = BaremetalFile::tell(stream);
+  if (result < 0)
+    return -1L;
+  if (result > cpp::numeric_limits<long>::max()) {
+    libc_errno = EOVERFLOW;
+    return -1L;
   }
   return static_cast<long>(result);
 }

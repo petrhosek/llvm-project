@@ -21,17 +21,18 @@
 #include "src/__support/printf_core/error_mapper.h"
 #include "src/__support/printf_core/printf_main.h"
 #include "src/__support/printf_core/writer.h"
+#include "src/stdio/baremetal/file_internal.h"
 
 namespace LIBC_NAMESPACE_DECL {
 
 namespace internal {
 
 LIBC_INLINE int write_hook(cpp::string_view str_view, void *cookie) {
-  auto result =
-      __llvm_libc_stdio_write(cookie, str_view.data(), str_view.size());
-  if (result <= 0)
-    return static_cast<int>(result);
-  if (static_cast<size_t>(result) != str_view.size())
+  auto result = write_internal(str_view.data(), str_view.size(),
+                               reinterpret_cast<::FILE *>(cookie));
+  if (result.has_error())
+    return -result.error;
+  if (result.value != str_view.size())
     return printf_core::FILE_WRITE_ERROR;
   return printf_core::WRITE_OK;
 }

@@ -1,3 +1,25 @@
+# file_variant is header-only and needs no mutex, so its test is registered
+# above the guard below.
+add_libc_test(
+  file_variant_test
+  SUITE
+    libc-support-tests
+  SRCS
+    file_variant_test.cpp
+  DEPENDS
+    libc.hdr.errno_macros
+    libc.hdr.stdio_macros
+    libc.hdr.types.cookie_io_functions_t
+    libc.hdr.types.off_t
+    libc.hdr.types.size_t
+    libc.hdr.types.ssize_t
+    libc.src.__support.CPP.new
+    libc.src.__support.CPP.utility
+    libc.src.__support.File.file_variant
+    libc.src.__support.File.io_backend
+    libc.src.__support.libc_errno
+)
+
 if(NOT (TARGET libc.src.__support.threads.mutex) OR LIBC_TARGET_OS_IS_GPU)
   # Not all platforms have a mutex implementation. If mutex is unvailable,
   # we just skip everything about files. The GPU does not currently support

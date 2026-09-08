@@ -205,6 +205,10 @@ function(_get_compile_options_from_config output_var)
     list(APPEND config_options "-DLIBC_COPT_SCANF_PROVIDE_ISOC99_ALIASES")
   endif()
 
+  if(LIBC_CONF_STDIO_ENABLE_DYNAMIC_BACKEND)
+    list(APPEND config_options "-DLIBC_CONF_STDIO_ENABLE_DYNAMIC_BACKEND")
+  endif()
+
   set(${output_var} ${config_options} PARENT_SCOPE)
 endfunction()
 
