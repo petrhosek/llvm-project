@@ -26,7 +26,7 @@ namespace LIBC_NAMESPACE_DECL {
 // A LinuxFile connected to a pipe to a child process created by popen. Open
 // popen streams are kept on their own list, so that each new popen child can
 // close the streams of earlier popen calls.
-class PopenFile : public LinuxFile {
+class PopenFile : public CustomFile {
   pid_t pid = -1;
   PopenFile *popen_prev = nullptr;
   PopenFile *popen_next = nullptr;
@@ -41,8 +41,10 @@ class PopenFile : public LinuxFile {
 public:
   PopenFile(int file_descriptor, uint8_t *buffer, size_t buffer_size,
             int buffer_mode, bool owned, FileMode mode)
-      : LinuxFile(file_descriptor, buffer, buffer_size, buffer_mode, owned,
-                  mode, &popen_file_close) {}
+      : CustomFile({&PlatformFileBackend::write, &PlatformFileBackend::read,
+                    &PlatformFileBackend::seek, &popen_file_close},
+                   buffer, buffer_size, buffer_mode, owned, mode,
+                   file_descriptor) {}
 
   pid_t get_pid() const { return pid; }
   void set_pid(pid_t new_pid) { pid = new_pid; }

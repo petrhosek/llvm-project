@@ -245,7 +245,10 @@ libc_function(
         "//libc/src/__support/printf_core:printf_error_mapper",
         "//libc/src/__support/printf_core:vfprintf_internal",
         "//libc/src/errno",
-    ],
+    ] + select({
+        "//libc:full_build": ["//libc/src/__support/File:platform_file"],
+        "//conditions:default": [],
+    }),
 )
 
 libc_function(
@@ -329,7 +332,10 @@ libc_function(
         "//libc/src/__support/printf_core:printf_error_mapper",
         "//libc/src/__support/printf_core:vfprintf_internal",
         "//libc/src/errno",
-    ],
+    ] + select({
+        "//libc:full_build": ["//libc/src/__support/File:platform_file"],
+        "//conditions:default": [],
+    }),
 )
 
 libc_support_library(
@@ -476,7 +482,10 @@ libc_function(
         "//libc/src/__support:arg_list",
         "//libc/src/__support/File:file",
         "//libc/src/__support/macros:config",
-    ],
+    ] + select({
+        "//libc:full_build": ["//libc/src/__support/File:platform_file"],
+        "//conditions:default": [],
+    }),
 )
 
 libc_function(
@@ -489,7 +498,10 @@ libc_function(
         "//libc/src/__support:arg_list",
         "//libc/src/__support/File:file",
         "//libc/src/__support/macros:config",
-    ],
+    ] + select({
+        "//libc:full_build": ["//libc/src/__support/File:platform_file"],
+        "//conditions:default": [],
+    }),
 )
 
 libc_function(

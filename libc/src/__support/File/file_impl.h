@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Implementation of a platform independent file data structure.
+/// Out-of-line method definitions for FileImpl<Backend>.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "file.h"
+#ifndef LLVM_LIBC_SRC___SUPPORT_FILE_FILE_IMPL_H
+#define LLVM_LIBC_SRC___SUPPORT_FILE_FILE_IMPL_H
 
+#include "file.h"
 #include "file_io_result.h"
 #include "file_mode.h"
 #include "hdr/errno_macros.h"
@@ -40,40 +42,95 @@
 #include <stddef.h>
 
 namespace LIBC_NAMESPACE_DECL {
-File *File::list_all = nullptr;
-Mutex File::list_lock(/*timed=*/false, /*recursive=*/false, /*robust=*/false,
-                      /*pshared=*/false);
+
+template <typename Backend>
+FileImpl<Backend> *FileImpl<Backend>::list_all = nullptr;
+
+template <typename Backend>
+Mutex FileImpl<Backend>::list_lock(/*timed=*/false,
+                                   /*recursive=*/false,
+                                   /*robust=*/false,
+                                   /*pshared=*/false);
 
 // Adds a file to the global list of all open files.
-void File::add_file(File *f) {
-  File::list_lock.lock();
-  f->next = File::list_all;
+template <typename Backend> void FileImpl<Backend>::add_file(FileImpl *f) {
+  list_lock.lock();
+  f->next = list_all;
   f->prev = nullptr;
-  if (File::list_all != nullptr)
-    File::list_all->prev = f;
-  File::list_all = f;
-  File::list_lock.unlock();
+  if (list_all != nullptr)
+    list_all->prev = f;
+  list_all = f;
+  list_lock.unlock();
 }
 
 // Removes a file from the global list of all open files.
-void File::remove_file(File *f) {
-  File::list_lock.lock();
+template <typename Backend> void FileImpl<Backend>::remove_file(FileImpl *f) {
+  list_lock.lock();
   if (f->prev != nullptr)
     f->prev->next = f->next;
   if (f->next != nullptr)
     f->next->prev = f->prev;
-  if (File::list_all == f)
-    File::list_all = f->next;
+  if (list_all == f)
+    list_all = f->next;
   f->prev = nullptr;
   f->next = nullptr;
-  File::list_lock.unlock();
+  list_lock.unlock();
 }
 
-File *File::get_first_file() { return File::list_all; }
-void File::lock_list() { File::list_lock.lock(); }
-void File::unlock_list() { File::list_lock.unlock(); }
+template <typename Backend>
+FileImpl<Backend> *FileImpl<Backend>::get_first_file() {
+  return list_all;
+}
 
-FileIOResult File::write_unlocked(const void *data, size_t len) {
+template <typename Backend> void FileImpl<Backend>::lock_list() {
+  list_lock.lock();
+}
+
+template <typename Backend> void FileImpl<Backend>::unlock_list() {
+  list_lock.unlock();
+}
+
+template <typename Backend>
+FileIOResult FileImpl<Backend>::backend_write_dynamic(const void *data,
+                                                      size_t len) {
+  using StreamBase = typename Backend::StreamBase;
+  if (kind == DispatchKind::CUSTOM)
+    return static_cast<CustomFileImpl<StreamBase> *>(this)->custom_write(data,
+                                                                         len);
+  return static_cast<CookieFileImpl<StreamBase> *>(this)->cookie_write(data,
+                                                                       len);
+}
+
+template <typename Backend>
+FileIOResult FileImpl<Backend>::backend_read_dynamic(void *data, size_t len) {
+  using StreamBase = typename Backend::StreamBase;
+  if (kind == DispatchKind::CUSTOM)
+    return static_cast<CustomFileImpl<StreamBase> *>(this)->custom_read(data,
+                                                                        len);
+  return static_cast<CookieFileImpl<StreamBase> *>(this)->cookie_read(data,
+                                                                      len);
+}
+
+template <typename Backend>
+ErrorOr<off_t> FileImpl<Backend>::backend_seek_dynamic(off_t offset,
+                                                       int whence) {
+  using StreamBase = typename Backend::StreamBase;
+  if (kind == DispatchKind::CUSTOM)
+    return static_cast<CustomFileImpl<StreamBase> *>(this)->custom_seek(offset,
+                                                                        whence);
+  return static_cast<CookieFileImpl<StreamBase> *>(this)->cookie_seek(offset,
+                                                                      whence);
+}
+
+template <typename Backend> int FileImpl<Backend>::backend_close_dynamic() {
+  using StreamBase = typename Backend::StreamBase;
+  if (kind == DispatchKind::CUSTOM)
+    return static_cast<CustomFileImpl<StreamBase> *>(this)->custom_close();
+  return static_cast<CookieFileImpl<StreamBase> *>(this)->cookie_close();
+}
+
+template <typename Backend>
+FileIOResult FileImpl<Backend>::write_unlocked(const void *data, size_t len) {
   switch (orientation) {
   case Orientation::WIDE:
     err = true;
@@ -87,7 +144,9 @@ FileIOResult File::write_unlocked(const void *data, size_t len) {
   return write_unlocked_impl(data, len);
 }
 
-FileIOResult File::write_unlocked_impl(const void *data, size_t len) {
+template <typename Backend>
+FileIOResult FileImpl<Backend>::write_unlocked_impl(const void *data,
+                                                    size_t len) {
   if (!write_allowed()) {
     err = true;
     return {0, EBADF};
@@ -111,11 +170,13 @@ FileIOResult File::write_unlocked_impl(const void *data, size_t len) {
                             len); // line buffered
 }
 
-FileIOResult File::write_unlocked_nbf(const uint8_t *data, size_t len) {
+template <typename Backend>
+FileIOResult FileImpl<Backend>::write_unlocked_nbf(const uint8_t *data,
+                                                   size_t len) {
   if (pos > 0) { // If the buffer is not empty
     // Flush the buffer
     const size_t write_size = pos;
-    FileIOResult write_result = platform_write(this, buf, write_size);
+    FileIOResult write_result = backend_write(buf, write_size);
     pos = 0; // Buffer is now empty so reset pos to the beginning.
     // If less bytes were written than expected, then an error occurred.
     if (write_result < write_size) {
@@ -125,13 +186,15 @@ FileIOResult File::write_unlocked_nbf(const uint8_t *data, size_t len) {
     }
   }
 
-  FileIOResult write_result = platform_write(this, data, len);
+  FileIOResult write_result = backend_write(data, len);
   if (write_result < len)
     err = true;
   return write_result;
 }
 
-FileIOResult File::write_unlocked_fbf(const uint8_t *data, size_t len) {
+template <typename Backend>
+FileIOResult FileImpl<Backend>::write_unlocked_fbf(const uint8_t *data,
+                                                   size_t len) {
   const size_t init_pos = pos;
   const size_t bufspace = bufsize - pos;
 
@@ -170,7 +233,7 @@ FileIOResult File::write_unlocked_fbf(const uint8_t *data, size_t len) {
   // is full.
   const size_t write_size = pos;
 
-  FileIOResult buf_result = platform_write(this, buf, write_size);
+  FileIOResult buf_result = backend_write(buf, write_size);
   size_t bytes_written = buf_result.value;
 
   pos = 0; // Buffer is now empty so reset pos to the beginning.
@@ -189,9 +252,7 @@ FileIOResult File::write_unlocked_fbf(const uint8_t *data, size_t len) {
     inline_memcpy(bufref.data(), remainder.data(), remainder.size());
     pos = remainder.size();
   } else {
-
-    FileIOResult result =
-        platform_write(this, remainder.data(), remainder.size());
+    FileIOResult result = backend_write(remainder.data(), remainder.size());
     bytes_written = result.value;
 
     // If less bytes were written than expected, then an error occurred. Return
@@ -205,7 +266,9 @@ FileIOResult File::write_unlocked_fbf(const uint8_t *data, size_t len) {
   return len;
 }
 
-FileIOResult File::write_unlocked_lbf(const uint8_t *data, size_t len) {
+template <typename Backend>
+FileIOResult FileImpl<Backend>::write_unlocked_lbf(const uint8_t *data,
+                                                   size_t len) {
   constexpr uint8_t NEWLINE_CHAR = '\n';
   size_t last_newline = len;
   for (size_t i = len; i >= 1; --i) {
@@ -252,7 +315,8 @@ FileIOResult File::write_unlocked_lbf(const uint8_t *data, size_t len) {
   return len;
 }
 
-FileIOResult File::read_unlocked(void *data, size_t len) {
+template <typename Backend>
+FileIOResult FileImpl<Backend>::read_unlocked(void *data, size_t len) {
   switch (orientation) {
   case Orientation::WIDE:
     err = true;
@@ -266,7 +330,8 @@ FileIOResult File::read_unlocked(void *data, size_t len) {
   return read_unlocked_impl(data, len);
 }
 
-FileIOResult File::read_unlocked_impl(void *data, size_t len) {
+template <typename Backend>
+FileIOResult FileImpl<Backend>::read_unlocked_impl(void *data, size_t len) {
   if (!read_allowed()) {
     err = true;
     return {0, EBADF};
@@ -284,7 +349,8 @@ FileIOResult File::read_unlocked_impl(void *data, size_t len) {
   }
 }
 
-size_t File::copy_data_from_buf(uint8_t *data, size_t len) {
+template <typename Backend>
+size_t FileImpl<Backend>::copy_data_from_buf(uint8_t *data, size_t len) {
   cpp::span<uint8_t> bufref(static_cast<uint8_t *>(buf), bufsize);
   cpp::span<uint8_t> dataref(static_cast<uint8_t *>(data), len);
 
@@ -304,13 +370,15 @@ size_t File::copy_data_from_buf(uint8_t *data, size_t len) {
   return available_data;
 }
 
-FileIOResult File::read_from_platform(uint8_t *dst, size_t min_bytes,
-                                      size_t max_bytes) {
+template <typename Backend>
+FileIOResult FileImpl<Backend>::read_from_backend(uint8_t *dst,
+                                                  size_t min_bytes,
+                                                  size_t max_bytes) {
   LIBC_ASSERT(min_bytes <= max_bytes);
   size_t total_read = 0;
   cpp::span<uint8_t> dstref(dst, max_bytes);
   while (total_read < min_bytes) {
-    FileIOResult result = platform_read(this, dstref.data(), dstref.size());
+    FileIOResult result = backend_read(dstref.data(), dstref.size());
     size_t fetched_size = result.value;
     LIBC_ASSERT(fetched_size <= dstref.size());
     total_read += fetched_size;
@@ -326,7 +394,8 @@ FileIOResult File::read_from_platform(uint8_t *dst, size_t min_bytes,
   return total_read;
 }
 
-FileIOResult File::read_unlocked_fbf(uint8_t *data, size_t len) {
+template <typename Backend>
+FileIOResult FileImpl<Backend>::read_unlocked_fbf(uint8_t *data, size_t len) {
   // Read data from the buffer first.
   size_t available_data = copy_data_from_buf(data, len);
   if (available_data == len)
@@ -338,20 +407,20 @@ FileIOResult File::read_unlocked_fbf(uint8_t *data, size_t len) {
   cpp::span<uint8_t> dataref(data + available_data, to_fetch);
 
   if (to_fetch > bufsize) {
-    FileIOResult result =
-        read_from_platform(dataref.data(), to_fetch, to_fetch);
+    FileIOResult result = read_from_backend(dataref.data(), to_fetch, to_fetch);
     return {available_data + result.value, result.error};
   }
 
   // Fetch and buffer another buffer worth of data.
-  FileIOResult result = read_from_platform(buf, to_fetch, bufsize);
+  FileIOResult result = read_from_backend(buf, to_fetch, bufsize);
   read_limit = result.value;
   pos = 0;
   available_data += copy_data_from_buf(dataref.data(), to_fetch);
   return {available_data, result.error};
 }
 
-FileIOResult File::read_unlocked_nbf(uint8_t *data, size_t len) {
+template <typename Backend>
+FileIOResult FileImpl<Backend>::read_unlocked_nbf(uint8_t *data, size_t len) {
   // Check whether there is a character in the ungetc buffer.
   size_t available_data = copy_data_from_buf(data, len);
   if (available_data == len)
@@ -360,11 +429,11 @@ FileIOResult File::read_unlocked_nbf(uint8_t *data, size_t len) {
   // Directly copy the data into |data|.
   size_t to_fetch = len - available_data;
   FileIOResult result =
-      read_from_platform(data + available_data, to_fetch, to_fetch);
+      read_from_backend(data + available_data, to_fetch, to_fetch);
   return {available_data + result.value, result.error};
 }
 
-int File::ungetc_unlocked(int c) {
+template <typename Backend> int FileImpl<Backend>::ungetc_unlocked(int c) {
   // There is no meaning to unget if:
   // 1. You are trying to push back EOF.
   // 2. Read operations are not allowed on this file.
@@ -414,9 +483,10 @@ int File::ungetc_unlocked(int c) {
   return c;
 }
 
-ErrorOr<int> File::seek_unlocked(off_t offset, int whence) {
+template <typename Backend>
+ErrorOr<int> FileImpl<Backend>::seek_unlocked(off_t offset, int whence) {
   if (prev_op == FileOp::WRITE && pos > 0) {
-    FileIOResult buf_result = platform_write(this, buf, pos);
+    FileIOResult buf_result = backend_write(buf, pos);
     if (buf_result.has_error() || buf_result.value < pos) {
       err = true;
       return Error(buf_result.error);
@@ -424,11 +494,11 @@ ErrorOr<int> File::seek_unlocked(off_t offset, int whence) {
     pos = 0;
   } else if (prev_op == FileOp::READ && whence == SEEK_CUR) {
     // More data could have been read out from the platform file than was
-    // required. So, we have to adjust the offset we pass to platform seek
+    // required. So, we have to adjust the offset we pass to backend seek
     // function. Note that read_limit >= pos is always true.
     offset -= (read_limit - pos);
   }
-  auto result = platform_seek(this, offset, whence);
+  auto result = backend_seek(offset, whence);
   if (!result.has_value())
     return Error(result.error());
 
@@ -444,11 +514,11 @@ ErrorOr<int> File::seek_unlocked(off_t offset, int whence) {
   return 0;
 }
 
-ErrorOr<off_t> File::tell_unlocked() {
+template <typename Backend> ErrorOr<off_t> FileImpl<Backend>::tell_unlocked() {
   int seek_target = (eof || (mode.is_append() && prev_op == FileOp::WRITE))
                         ? SEEK_END
                         : SEEK_CUR;
-  auto result = platform_seek(this, 0, seek_target);
+  auto result = backend_seek(0, seek_target);
   if (!result.has_value())
     return Error(result.error());
   if (result.value() < 0)
@@ -461,7 +531,9 @@ ErrorOr<off_t> File::tell_unlocked() {
   return platform_offset;
 }
 
-ErrorOr<File::Position> File::get_pos_unlocked() {
+template <typename Backend>
+ErrorOr<typename FileImpl<Backend>::Position>
+FileImpl<Backend>::get_pos_unlocked() {
   auto pos_result = tell_unlocked();
   if (!pos_result.has_value())
     return Error(pos_result.error());
@@ -472,7 +544,8 @@ ErrorOr<File::Position> File::get_pos_unlocked() {
   };
 }
 
-ErrorOr<int> File::set_pos_unlocked(const Position &fpos) {
+template <typename Backend>
+ErrorOr<int> FileImpl<Backend>::set_pos_unlocked(const Position &fpos) {
   auto result = seek_unlocked(fpos.offset, SEEK_SET);
   if (!result.has_value())
     return Error(result.error());
@@ -481,9 +554,9 @@ ErrorOr<int> File::set_pos_unlocked(const Position &fpos) {
   return 0;
 }
 
-int File::flush_unlocked() {
+template <typename Backend> int FileImpl<Backend>::flush_unlocked() {
   if (prev_op == FileOp::WRITE && pos > 0) {
-    FileIOResult buf_result = platform_write(this, buf, pos);
+    FileIOResult buf_result = backend_write(buf, pos);
     if (buf_result.has_error() || buf_result.value < pos) {
       err = true;
       return buf_result.error;
@@ -491,7 +564,7 @@ int File::flush_unlocked() {
     pos = 0;
   } else if (prev_op == FileOp::READ) {
     if (read_limit > pos) {
-      if (!platform_seek(this, -static_cast<off_t>(read_limit - pos), SEEK_CUR)
+      if (!backend_seek(-static_cast<off_t>(read_limit - pos), SEEK_CUR)
                .has_value()) {
         // We ignore seek errors for non-seekable files (like pipes) as per
         // POSIX.
@@ -504,13 +577,13 @@ int File::flush_unlocked() {
 
 // Does the following:
 // 1. If in write mode, Write out any data present in the buffer.
-// 2. Call platform_close.
-// platform_close is expected to cleanup the complete file object.
-int File::close() {
+// 2. Call backend_close.
+// backend_close is expected to cleanup the complete file object.
+template <typename Backend> int FileImpl<Backend>::close() {
   {
     FileLock lock(this);
     if (prev_op == FileOp::WRITE && pos > 0) {
-      auto buf_result = platform_write(this, buf, pos);
+      auto buf_result = backend_write(buf, pos);
       if (buf_result.has_error() || buf_result.value < pos) {
         err = true;
         return buf_result.error;
@@ -518,20 +591,21 @@ int File::close() {
     }
   }
 
-  // If we own the buffer, delete it before calling the platform close
-  // implementation. The platform close should not need to access the buffer
+  // If we own the buffer, delete it before calling the backend close
+  // implementation. The backend close should not need to access the buffer
   // and we need to clean it up before the entire structure is removed.
   if (own_buf)
     delete buf;
 
-  // Platform close is expected to cleanup the file data structure which
-  // includes the file mutex. Hence, we call platform_close after releasing
+  // Backend close is expected to cleanup the file data structure which
+  // includes the file mutex. Hence, we call backend_close after releasing
   // the file lock. Another thread doing file operations while a thread is
   // closing the file is undefined behavior as per POSIX.
-  return platform_close(this);
+  return backend_close();
 }
 
-int File::set_buffer(void *buffer, size_t size, int buffer_mode) {
+template <typename Backend>
+int FileImpl<Backend>::set_buffer(void *buffer, size_t size, int buffer_mode) {
   // We do not need to lock the file as this method should be called before
   // other operations are performed on the file.
   if (buffer != nullptr && size == 0)
@@ -587,7 +661,8 @@ int File::set_buffer(void *buffer, size_t size, int buffer_mode) {
   return 0;
 }
 
-FileIOResult File::write_unlocked(const wchar_t *ws, size_t len) {
+template <typename Backend>
+FileIOResult FileImpl<Backend>::write_unlocked(const wchar_t *ws, size_t len) {
   switch (orientation) {
   case Orientation::BYTE:
     err = true;
@@ -632,7 +707,8 @@ FileIOResult File::write_unlocked(const wchar_t *ws, size_t len) {
   return {written, 0};
 }
 
-FileIOResult File::read_unlocked(wchar_t *ws, size_t len) {
+template <typename Backend>
+FileIOResult FileImpl<Backend>::read_unlocked(wchar_t *ws, size_t len) {
   switch (orientation) {
   case Orientation::BYTE:
     err = true;
@@ -675,7 +751,8 @@ FileIOResult File::read_unlocked(wchar_t *ws, size_t len) {
   return {read_count, 0};
 }
 
-ErrorOr<wint_t> File::ungetwc_unlocked(wint_t wc) {
+template <typename Backend>
+ErrorOr<wint_t> FileImpl<Backend>::ungetwc_unlocked(wint_t wc) {
   // There is no meaning to unget if:
   // 1. You are trying to push back EOF.
   // 2. Read operations are not allowed on this file.
@@ -723,3 +800,5 @@ ErrorOr<wint_t> File::ungetwc_unlocked(wint_t wc) {
 }
 
 } // namespace LIBC_NAMESPACE_DECL
+
+#endif // LLVM_LIBC_SRC___SUPPORT_FILE_FILE_IMPL_H

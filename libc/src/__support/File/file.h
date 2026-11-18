@@ -16,14 +16,18 @@
 
 #include "file_io_result.h"
 #include "file_mode.h"
+#include "hdr/errno_macros.h"
 #include "hdr/stdint_proxy.h"
 #include "hdr/stdio_macros.h"
 #include "hdr/types/off_t.h"
+#include "hdr/types/ssize_t.h"
 #include "hdr/types/wchar_t.h"
 #include "hdr/types/wint_t.h"
+#include "src/__support/CPP/new.h"
 #include "src/__support/error_or.h"
 #include "src/__support/macros/attributes.h"
 #include "src/__support/macros/config.h"
+#include "src/__support/macros/optimization.h"
 #include "src/__support/threads/mutex.h"
 #include "src/__support/wchar/mbstate.h"
 
@@ -31,51 +35,115 @@
 
 namespace LIBC_NAMESPACE_DECL {
 
-// This a generic base class to encapsulate a platform independent file data
-// structure. Platform specific specializations should create a subclass as
-// suitable for their platform.
-class File {
+namespace internal {
+
+template <typename FileT>
+inline FileIOResult default_write(FileT *, const void *, size_t size) {
+  return size;
+}
+
+template <typename FileT>
+inline FileIOResult default_read(FileT *, void *, size_t) {
+  return 0;
+}
+
+template <typename FileT>
+inline ErrorOr<off_t> default_seek(FileT *, off_t, int) {
+  return Error(ESPIPE);
+}
+
+template <typename FileT> inline int default_close(FileT *) { return 0; }
+
+inline ssize_t default_cookie_read(void *, char *, size_t) { return 0; }
+inline ssize_t default_cookie_write(void *, const char *, size_t) { return 0; }
+inline int default_cookie_seek(void *, off_t *, int) { return -1; }
+inline int default_cookie_close(void *) { return 0; }
+
+} // namespace internal
+
+template <typename FileT> struct FileOps {
+  using WriteFunc = FileIOResult(FileT *, const void *, size_t);
+  using ReadFunc = FileIOResult(FileT *, void *, size_t);
+  // The SeekFunc is expected to return the current offset of the external
+  // file position indicator.
+  using SeekFunc = ErrorOr<off_t>(FileT *, off_t, int);
+  using CloseFunc = int(FileT *);
+
+  WriteFunc *write;
+  ReadFunc *read;
+  SeekFunc *seek;
+  CloseFunc *close;
+
+  LIBC_INLINE constexpr FileOps(WriteFunc *w, ReadFunc *r, SeekFunc *s,
+                                CloseFunc *c)
+      : write(w != nullptr ? w : &internal::default_write<FileT>),
+        read(r != nullptr ? r : &internal::default_read<FileT>),
+        seek(s != nullptr ? s : &internal::default_seek<FileT>),
+        close(c != nullptr ? c : &internal::default_close<FileT>) {}
+};
+
+struct CookieOps {
+  using ReadFunc = ssize_t(void *, char *, size_t);
+  using WriteFunc = ssize_t(void *, const char *, size_t);
+  using SeekFunc = int(void *, off_t *, int);
+  using CloseFunc = int(void *);
+
+  ReadFunc *read;
+  WriteFunc *write;
+  SeekFunc *seek;
+  CloseFunc *close;
+
+  LIBC_INLINE constexpr CookieOps(ReadFunc *r, WriteFunc *w, SeekFunc *s,
+                                  CloseFunc *c)
+      : read(r != nullptr ? r : &internal::default_cookie_read),
+        write(w != nullptr ? w : &internal::default_cookie_write),
+        seek(s != nullptr ? s : &internal::default_cookie_seek),
+        close(c != nullptr ? c : &internal::default_cookie_close) {}
+};
+
+// This is a generic base class template to encapsulate a platform independent
+// file data structure. Platform specific specializations provide a static
+// Backend and optionally subclass FileImpl as suitable for their platform.
+template <typename Backend> class FileImpl {
 public:
-  static void add_file(File *f);
-  static void remove_file(File *f);
-  static File *get_first_file();
+  using FileBase = FileImpl;
+  using Ops = FileOps<FileImpl>;
+
+  enum class DispatchKind : uint8_t {
+    STATIC = 0,
+    CUSTOM = 1,
+    COOKIE = 2,
+  };
+
+  static void add_file(FileImpl *f);
+  static void remove_file(FileImpl *f);
+  static FileImpl *get_first_file();
   static void lock_list();
   static void unlock_list();
 
-  static File *list_all;
+  static FileImpl *list_all;
   static Mutex list_lock;
 
-  LIBC_INLINE File *get_next() const { return next; }
+  LIBC_INLINE FileImpl *get_next() const { return next; }
 
   static constexpr size_t DEFAULT_BUFFER_SIZE = 1024;
 
   enum class Orientation : uint8_t { UNORIENTED, BYTE, WIDE };
 
-  using LockFunc = void(File *);
-  using UnlockFunc = void(File *);
+  using LockFunc = void(FileImpl *);
+  using UnlockFunc = void(FileImpl *);
 
-  using WriteFunc = FileIOResult(File *, const void *, size_t);
-  using ReadFunc = FileIOResult(File *, void *, size_t);
-  // The SeekFunc is expected to return the current offset of the external
-  // file position indicator.
-  using SeekFunc = ErrorOr<off_t>(File *, off_t, int);
-  using CloseFunc = int(File *);
-
-  // Exposes the platform I/O callbacks so a platform backend can positively
-  // identify which concrete File subclass an object is (e.g. distinguishing
-  // a LinuxFile from a CookieFile/MemoryFile) without needing RTTI. See
-  // is_linux_file() in the Linux backend for the concrete use.
-  LIBC_INLINE ReadFunc *get_read_func() const { return platform_read; }
-  LIBC_INLINE WriteFunc *get_write_func() const { return platform_write; }
-  LIBC_INLINE SeekFunc *get_seek_func() const { return platform_seek; }
-  LIBC_INLINE CloseFunc *get_close_func() const { return platform_close; }
+  using WriteFunc = typename Ops::WriteFunc;
+  using ReadFunc = typename Ops::ReadFunc;
+  using SeekFunc = typename Ops::SeekFunc;
+  using CloseFunc = typename Ops::CloseFunc;
 
   // This is a convenience RAII class to lock and unlock file objects.
   class FileLock {
-    File *file;
+    FileImpl *file;
 
   public:
-    LIBC_INLINE explicit FileLock(File *f) : file(f) { file->lock(); }
+    LIBC_INLINE explicit FileLock(FileImpl *f) : file(f) { file->lock(); }
 
     LIBC_INLINE ~FileLock() { file->unlock(); }
 
@@ -85,14 +153,6 @@ public:
 
 private:
   enum class FileOp : uint8_t { NONE, READ, WRITE, SEEK };
-
-  // Platform specific functions which create new file objects should initialize
-  // these fields suitably via the constructor. Typically, they should be simple
-  // syscall wrappers for the corresponding functionality.
-  WriteFunc *platform_write;
-  ReadFunc *platform_read;
-  SeekFunc *platform_seek;
-  CloseFunc *platform_close;
 
   uint8_t *buf;   // Pointer to the stream buffer for buffered streams
   size_t bufsize; // Size of the buffer pointed to by |buf|.
@@ -104,8 +164,8 @@ private:
   // of the index to which the buffer can be read until.
   size_t read_limit;
 
-  File *prev;
-  File *next;
+  FileImpl *prev;
+  FileImpl *next;
 
   internal::mbstate mbstate;
 
@@ -113,7 +173,7 @@ private:
   FileMode mode;
 
   // For files which are readable, we should be able to support one ungetc
-  // operation even if |buf| is nullptr. So, in the constructor of File, we
+  // operation even if |buf| is nullptr. So, in the constructor of FileImpl, we
   // set |buf| to point to this buffer character. It needs to be at least 4
   // bytes so we can store a widechar.
   uint8_t ungetc_buf[4];
@@ -132,6 +192,7 @@ private:
   bool own_buf : 1;
   bool eof : 1;
   bool err : 1;
+  DispatchKind kind : 2;
 
 protected:
   LIBC_INLINE constexpr bool write_allowed() const {
@@ -154,6 +215,19 @@ protected:
     adjust_buf();
   }
 
+  LIBC_INLINE constexpr FileImpl(DispatchKind dispatch_kind, uint8_t *buffer,
+                                 size_t buffer_size, int buffer_mode,
+                                 bool owned, FileMode mode)
+      : buf(buffer), bufsize(buffer_size), pos(0), read_limit(0), prev(nullptr),
+        next(nullptr), mbstate(), mode(mode), ungetc_buf{},
+        mutex(/*timed=*/false, /*recursive=*/true,
+              /*robust=*/false, /*pshared=*/false),
+        bufmode(static_cast<int8_t>(buffer_mode)), prev_op(FileOp::NONE),
+        orientation(Orientation::UNORIENTED), own_buf(owned), eof(false),
+        err(false), kind(dispatch_kind) {
+    adjust_buf();
+  }
+
 public:
   // We want this constructor to be constexpr so that global file objects
   // like stdout do not require invocation of the constructor which can
@@ -162,18 +236,14 @@ public:
   // meaningful - that is, |buffer| is nullptr if and only if |buffer_size|
   // is zero. This way, we will not have to employ the semantics of
   // the set_buffer method and allocate a buffer.
-  LIBC_INLINE constexpr File(WriteFunc *wf, ReadFunc *rf, SeekFunc *sf,
-                             CloseFunc *cf, uint8_t *buffer, size_t buffer_size,
-                             int buffer_mode, bool owned, FileMode mode)
-      : platform_write(wf), platform_read(rf), platform_seek(sf),
-        platform_close(cf), buf(buffer), bufsize(buffer_size), pos(0),
-        read_limit(0), prev(nullptr), next(nullptr), mbstate(), mode(mode),
-        ungetc_buf{}, mutex(/*timed=*/false, /*recursive=*/true,
-                            /*robust=*/false, /*pshared=*/false),
-        bufmode(static_cast<int8_t>(buffer_mode)), prev_op(FileOp::NONE),
-        orientation(Orientation::UNORIENTED), own_buf(owned), eof(false),
-        err(false) {
-    adjust_buf();
+  LIBC_INLINE constexpr FileImpl(uint8_t *buffer, size_t buffer_size,
+                                 int buffer_mode, bool owned, FileMode mode)
+      : FileImpl(DispatchKind::STATIC, buffer, buffer_size, buffer_mode, owned,
+                 mode) {}
+
+  LIBC_INLINE constexpr DispatchKind get_dispatch_kind() const { return kind; }
+  LIBC_INLINE constexpr bool is_dynamic() const {
+    return kind != DispatchKind::STATIC;
   }
 
   // Buffered write of |len| bytes from |data| without the file lock.
@@ -338,6 +408,36 @@ public:
   }
 
 private:
+  LIBC_NOINLINE FileIOResult backend_write_dynamic(const void *data,
+                                                   size_t len);
+  LIBC_NOINLINE FileIOResult backend_read_dynamic(void *data, size_t len);
+  LIBC_NOINLINE ErrorOr<off_t> backend_seek_dynamic(off_t offset, int whence);
+  LIBC_NOINLINE int backend_close_dynamic();
+
+  LIBC_INLINE FileIOResult backend_write(const void *data, size_t len) {
+    if (LIBC_LIKELY(kind == DispatchKind::STATIC))
+      return Backend::write(this, data, len);
+    return backend_write_dynamic(data, len);
+  }
+
+  LIBC_INLINE FileIOResult backend_read(void *data, size_t len) {
+    if (LIBC_LIKELY(kind == DispatchKind::STATIC))
+      return Backend::read(this, data, len);
+    return backend_read_dynamic(data, len);
+  }
+
+  LIBC_INLINE ErrorOr<off_t> backend_seek(off_t offset, int whence) {
+    if (LIBC_LIKELY(kind == DispatchKind::STATIC))
+      return Backend::seek(this, offset, whence);
+    return backend_seek_dynamic(offset, whence);
+  }
+
+  LIBC_INLINE int backend_close() {
+    if (LIBC_LIKELY(kind == DispatchKind::STATIC))
+      return Backend::close(this);
+    return backend_close_dynamic();
+  }
+
   FileIOResult write_unlocked_impl(const void *data, size_t len);
   FileIOResult read_unlocked_impl(void *data, size_t len);
 
@@ -347,8 +447,8 @@ private:
 
   FileIOResult read_unlocked_fbf(uint8_t *data, size_t len);
   FileIOResult read_unlocked_nbf(uint8_t *data, size_t len);
-  FileIOResult read_from_platform(uint8_t *dst, size_t min_bytes,
-                                  size_t max_bytes);
+  FileIOResult read_from_backend(uint8_t *dst, size_t min_bytes,
+                                 size_t max_bytes);
   size_t copy_data_from_buf(uint8_t *data, size_t len);
 
   LIBC_INLINE constexpr void adjust_buf() {
@@ -373,6 +473,88 @@ private:
     }
   }
 };
+
+struct PlatformFileBackend;
+
+template <typename BaseFile> class CustomFileImpl : public BaseFile {
+public:
+  using Ops = typename BaseFile::Ops;
+
+private:
+  Ops ops;
+  friend typename BaseFile::FileBase;
+
+  LIBC_INLINE FileIOResult custom_write(const void *data, size_t len) {
+    return ops.write(this, data, len);
+  }
+  LIBC_INLINE FileIOResult custom_read(void *data, size_t len) {
+    return ops.read(this, data, len);
+  }
+  LIBC_INLINE ErrorOr<off_t> custom_seek(off_t offset, int whence) {
+    return ops.seek(this, offset, whence);
+  }
+  LIBC_INLINE int custom_close() { return ops.close(this); }
+
+public:
+  template <typename... Args>
+  LIBC_INLINE constexpr CustomFileImpl(const Ops &fops, uint8_t *buffer,
+                                       size_t buffer_size, int buffer_mode,
+                                       bool owned, FileMode mode,
+                                       Args... base_args)
+      : BaseFile(BaseFile::DispatchKind::CUSTOM, buffer, buffer_size,
+                 buffer_mode, owned, mode, base_args...),
+        ops(fops) {}
+};
+
+template <typename BaseFile> class CookieFileImpl final : public BaseFile {
+  void *cookie;
+  CookieOps ops;
+  friend typename BaseFile::FileBase;
+
+  LIBC_INLINE FileIOResult cookie_write(const void *data, size_t size) {
+    ssize_t result =
+        ops.write(cookie, reinterpret_cast<const char *>(data), size);
+    if (result < 0)
+      return {0, EIO};
+    return static_cast<size_t>(result);
+  }
+
+  LIBC_INLINE FileIOResult cookie_read(void *data, size_t size) {
+    ssize_t result = ops.read(cookie, reinterpret_cast<char *>(data), size);
+    if (result < 0)
+      return {0, EIO};
+    return static_cast<size_t>(result);
+  }
+
+  LIBC_INLINE ErrorOr<off_t> cookie_seek(off_t offset, int whence) {
+    int result = ops.seek(cookie, &offset, whence);
+    if (result == 0)
+      return offset;
+    return Error(ops.seek == &internal::default_cookie_seek ? EINVAL : EIO);
+  }
+
+  LIBC_INLINE int cookie_close() {
+    int retval = ops.close(cookie);
+    delete this;
+    return retval == 0 ? 0 : EIO;
+  }
+
+public:
+  // CookieFileImpl instances must be heap-allocated because close() deletes
+  // |this| after invoking |ops.close(cookie)|.
+  template <typename... Args>
+  LIBC_INLINE constexpr CookieFileImpl(void *c, CookieOps cops, uint8_t *buffer,
+                                       size_t buffer_size, int buffer_mode,
+                                       bool owned, FileMode mode,
+                                       Args... base_args)
+      : BaseFile(BaseFile::DispatchKind::COOKIE, buffer, buffer_size,
+                 buffer_mode, owned, mode, base_args...),
+        cookie(c), ops(cops) {}
+};
+
+using File = FileImpl<PlatformFileBackend>;
+
+extern template class FileImpl<PlatformFileBackend>;
 
 // The implementation of this function is provided by the platform_file
 // library.

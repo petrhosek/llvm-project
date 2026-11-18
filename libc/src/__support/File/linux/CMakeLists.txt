@@ -5,17 +5,27 @@ add_object_library(
     file.cpp
   HDRS
     file.h
+    ../platform_file.h
   DEPENDS
     libc.hdr.errno_macros
     libc.hdr.fcntl_macros
     libc.hdr.func.free
+    libc.hdr.func.realloc
+    libc.hdr.stdint_proxy
     libc.hdr.stdio_macros
-    libc.hdr.types.mode_t
     libc.hdr.sys_stat_macros
+    libc.hdr.types.char32_t
+    libc.hdr.types.char8_t
     libc.hdr.types.FILE
+    libc.hdr.types.mode_t
     libc.hdr.types.off_t
+    libc.hdr.types.ssize_t
+    libc.hdr.types.wchar_t
+    libc.hdr.types.wint_t
+    libc.hdr.wchar_macros
     libc.src.__support.alloc_checker
     libc.src.__support.CPP.new
+    libc.src.__support.CPP.span
     libc.src.__support.CPP.type_traits
     libc.src.__support.OSUtil.linux.syscall_wrappers.close
     libc.src.__support.OSUtil.linux.syscall_wrappers.dup3
@@ -26,6 +36,13 @@ add_object_library(
     libc.src.__support.OSUtil.linux.syscall_wrappers.write
     libc.src.__support.error_or
     libc.src.__support.File.file
+    libc.src.__support.libc_assert
+    libc.src.__support.macros.optimization
+    libc.src.__support.threads.mutex
+    libc.src.__support.wchar.character_converter
+    libc.src.__support.wchar.mbstate
+    libc.src.__support.wchar.wcrtomb
+    libc.src.string.memory_utils.inline_memcpy
 )
 
 add_object_library(

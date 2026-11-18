@@ -13,11 +13,22 @@ add_libc_test(
     file_test.cpp
   DEPENDS
     libc.include.stdio
+    libc.hdr.errno_macros
+    libc.hdr.func.realloc
     libc.hdr.wchar_macros
     libc.hdr.types.size_t
+    libc.hdr.types.ssize_t
+    libc.src.__support.alloc_checker
     libc.src.__support.CPP.new
     libc.src.__support.File.file
     libc.src.__support.error_or
+    libc.src.__support.libc_assert
+    libc.src.__support.macros.optimization
+    libc.src.__support.threads.mutex
+    libc.src.__support.wchar.character_converter
+    libc.src.__support.wchar.mbstate
+    libc.src.__support.wchar.wcrtomb
+    libc.src.string.memory_utils.inline_memcpy
     libc.test.UnitTest.MemoryMatcher
 )
 

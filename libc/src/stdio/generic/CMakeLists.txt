@@ -143,6 +143,7 @@ add_generic_entrypoint_object(
     libc.hdr.types.mbstate_t
     libc.src.__support.CPP.type_traits
     libc.src.__support.File.file
+    libc.src.__support.File.platform_file
     libc.src.__support.common
     libc.src.__support.error_or
     libc.src.__support.libc_errno
@@ -164,6 +165,7 @@ add_generic_entrypoint_object(
     libc.hdr.types.mbstate_t
     libc.src.__support.CPP.type_traits
     libc.src.__support.File.file
+    libc.src.__support.File.platform_file
     libc.src.__support.common
     libc.src.__support.error_or
     libc.src.__support.libc_errno

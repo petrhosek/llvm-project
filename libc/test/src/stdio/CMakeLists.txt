@@ -19,6 +19,7 @@ add_libc_test(
     libc.src.stdio.ferror
     libc.src.stdio.fflush
     libc.src.stdio.fileno
+    libc.src.stdio.fmemopen
     libc.src.stdio.fopen
     libc.src.stdio.fread
     libc.src.stdio.freopen
@@ -149,6 +150,7 @@ add_libc_test(
     fmemopen_test.cpp
   DEPENDS
     libc.include.stdio
+    libc.hdr.errno_macros
     libc.hdr.stdio_macros
     libc.hdr.types.off_t
     libc.src.__support.CPP.limits
@@ -753,6 +755,7 @@ add_libc_test(
     libc.src.__support.CPP.string_view
     libc.src.__support.File.file
     libc.src.__support.File.file_io_result
+    libc.src.__support.File.platform_file
     libc.src.__support.error_or
     libc.src.stdio.generic.getdelim_impl
     libc.src.string.memory_utils.inline_memcpy

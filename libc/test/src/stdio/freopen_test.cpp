@@ -19,6 +19,7 @@
 #include "src/stdio/ferror.h"
 #include "src/stdio/fflush.h"
 #include "src/stdio/fileno.h"
+#include "src/stdio/fmemopen.h"
 #include "src/stdio/fopen.h"
 #include "src/stdio/fread.h"
 #include "src/stdio/freopen.h"
@@ -343,6 +344,23 @@ TEST_F(LlvmLibcFreopenTest, StdoutFailureTest) {
       Fails(ENOENT, static_cast<void *>(nullptr)));
 }
 #endif
+
+TEST_F(LlvmLibcFreopenTest, DynamicStreamFailure) {
+  const auto FILENAME = libc_make_test_file_path("freopen_dynamic_stream.test");
+  char storage[16] = {0};
+  ::FILE *mem_file = LIBC_NAMESPACE::fmemopen(storage, sizeof(storage), "w+");
+  ASSERT_NE(mem_file, nullptr);
+  ASSERT_THAT(LIBC_NAMESPACE::fwrite("abc", 1, 3, mem_file),
+              Succeeds(static_cast<size_t>(3)));
+
+  ASSERT_THAT(LIBC_NAMESPACE::freopen(FILENAME, "w", mem_file),
+              Fails(EBADF, static_cast<void *>(nullptr)));
+  ASSERT_THAT(LIBC_NAMESPACE::freopen(nullptr, "r", mem_file),
+              Fails(EBADF, static_cast<void *>(nullptr)));
+  EXPECT_STREQ(storage, "abc");
+
+  ASSERT_THAT(LIBC_NAMESPACE::fclose(mem_file), Succeeds(0));
+}
 
 TEST_F(LlvmLibcFreopenTest, NullStreamFailure) {
   const auto FILENAME = libc_make_test_file_path("freopen_null_stream.test");

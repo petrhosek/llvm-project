@@ -103,7 +103,9 @@ add_entrypoint_object(
     libc.src.__support.CPP.algorithm
     libc.src.__support.CPP.new
     libc.src.__support.File.file
+    libc.src.__support.File.platform_file
     libc.src.__support.alloc_checker
+    libc.src.__support.common
     libc.src.__support.libc_errno
     libc.src.__support.macros.null_check
     libc.src.string.memory_utils.inline_memcpy
@@ -117,6 +119,7 @@ add_entrypoint_object(
     fopencookie.h
   DEPENDS
     libc.hdr.errno_macros
+    libc.hdr.func.free
     libc.hdr.stdio_macros
     libc.hdr.types.off_t
     libc.hdr.types.ssize_t
@@ -124,6 +127,10 @@ add_entrypoint_object(
     libc.hdr.types.FILE
     libc.src.__support.CPP.new
     libc.src.__support.File.file
+    libc.src.__support.File.platform_file
+    libc.src.__support.alloc_checker
+    libc.src.__support.common
+    libc.src.__support.libc_errno
 )
 
 add_entrypoint_object(
